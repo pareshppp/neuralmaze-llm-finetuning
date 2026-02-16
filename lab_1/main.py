@@ -71,7 +71,7 @@ def main(
     # --- TRAINING PARAMETERS ---
     output_dir: str = "outputs",
     hub_model_id: str = "Qwen3-0.6B-Base-CPT-Math",
-    max_seq_length: int = 2048,
+    max_seq_length: int = 4096,  # Longer context to accommodate packed sequences
     batch_size: int = 32,
     gradient_accumulation_steps: int = 4,
     learning_rate: float = 2e-5,  # Lower LR for full finetuning to prevent "catastrophic forgetting"
