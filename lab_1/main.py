@@ -37,8 +37,8 @@ hf jobs uv run main.py `
     --flavor a10g-small `
     --timeout 3h `
     -e COMET_PROJECT_NAME="neuralmaze-finetuning-lab1" `
-    -s COMET_API_KEY="--------------" `
-    -s HF_TOKEN="-----------------" `
+    -s COMET_API_KEY=<your_comet_api_key> `
+    -s HF_TOKEN=<your_hf_token> `
 """
 
 import comet_ml
