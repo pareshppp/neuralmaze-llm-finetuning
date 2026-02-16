@@ -72,7 +72,7 @@ def main(
     output_dir: str = "outputs",
     hub_model_id: str = "Qwen3-0.6B-Base-CPT-Math",
     max_seq_length: int = 2048,
-    batch_size: int = 8,
+    batch_size: int = 32,
     gradient_accumulation_steps: int = 4,
     learning_rate: float = 2e-5,  # Lower LR for full finetuning to prevent "catastrophic forgetting"
     num_train_epochs: int = 1,
