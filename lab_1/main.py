@@ -98,6 +98,9 @@ def main(
         load_in_4bit=False,
     )
 
+    # Enable gradient checkpointing to save memory
+    model.gradient_checkpointing_enable()
+
     log.info("Model loaded successfully in full precision.")
 
     # --------------------------------------------------------------------------
@@ -140,7 +143,7 @@ def main(
         bf16=torch.cuda.is_bf16_supported(),
         optim="adamw_8bit",  # Saves optimizer state memory, allowing larger batch sizes
         weight_decay=0.01,
-        gradient_checkpointing=False,  # Disable to avoid compatibility issues with Qwen3
+        gradient_checkpointing=True,  # Enabled via model.gradient_checkpointing_enable()
         # Logging & Saving
         logging_steps=20,
         save_strategy="no",  # We only save at the end for this job
