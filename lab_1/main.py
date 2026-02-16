@@ -140,6 +140,7 @@ def main(
         bf16=torch.cuda.is_bf16_supported(),
         optim="adamw_8bit",  # Saves optimizer state memory, allowing larger batch sizes
         weight_decay=0.01,
+        gradient_checkpointing=False,  # Disable to avoid compatibility issues with Qwen3
         # Logging & Saving
         logging_steps=20,
         save_strategy="no",  # We only save at the end for this job
