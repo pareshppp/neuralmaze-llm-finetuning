@@ -71,8 +71,8 @@ def main(
     # --- TRAINING PARAMETERS ---
     output_dir: str = "outputs",
     hub_model_id: str = "Qwen3-0.6B-Base-CPT-Math",
-    max_seq_length: int = 1024,
-    batch_size: int = 4,
+    max_seq_length: int = 2048,
+    batch_size: int = 8,
     gradient_accumulation_steps: int = 4,
     learning_rate: float = 2e-5,  # Lower LR for full finetuning to prevent "catastrophic forgetting"
     num_train_epochs: int = 1,
@@ -114,7 +114,7 @@ def main(
 
     # Using the first 500 examples for this demo job to finish quickly.
     # In production, you would use the full 'train' split.
-    dataset = load_dataset(dataset_name, split=f"train[:10000]")
+    dataset = load_dataset(dataset_name, split=f"train[:100000]")
 
     log.info(f"Dataset loaded. Samples: {len(dataset)}")
 
