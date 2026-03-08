@@ -80,7 +80,7 @@ def main(
     lora_dropout: float = 0.0,  # Dropout for LoRA layers. 0 is standard for efficiency.
     # --- DATASET PARAMETERS ---
     dataset_name: str = "theneuralmaze/finetuning-sessions-dataset",
-    dataset_column: str = "messages_no_thinking",  # or "messages_thinking" to include <think> traces
+    dataset_column: str = "messages_thinking",  # "messages_no_thinking" or "messages_thinking" to include <think> traces
     dataset_num_rows: int = None,  # None = full train split; set an int (e.g. 500) for a quick demo run
     eval_num_rows: int = None,  # None = full validation split
     # --- TRAINING PARAMETERS ---
@@ -263,3 +263,4 @@ def main(
 
 if __name__ == "__main__":
     fire.Fire(main)
+
