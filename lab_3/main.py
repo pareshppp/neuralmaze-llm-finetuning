@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.12"
+# requires-python = ">=3.12,<3.14"
 # dependencies = [
 #   "fire>=0.7.1",
 #   "comet_ml",
@@ -263,4 +263,5 @@ def main(
 
 if __name__ == "__main__":
     fire.Fire(main)
+
 
