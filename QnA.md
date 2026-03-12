@@ -1383,4 +1383,153 @@ Without Flash Attention 2, your continued pre-training job would require:
 
 ---
 
+## Chapter 3: LoRA Fine-Tuning (SFT)
+
+<details>
+<summary><b>Q1: Where does padding happen during the training process? Explain padding-free training methods.</b></summary>
+
+<br>
+
+### Padding in LLM Training
+
+#### What is Padding and Why is it Needed?
+
+Neural networks process data in batches, and all sequences in a batch must be the same length for efficient tensor operations. Since real-world sequences (conversations, documents) have variable lengths, shorter sequences are **padded** with a special `[PAD]` token to match the longest sequence in the batch.
+
+```
+Batch without padding (variable length — not valid for tensor ops):
+  Seq 1: [tok1, tok2, tok3, tok4, tok5]          (length 5)
+  Seq 2: [tok1, tok2]                            (length 2)
+  Seq 3: [tok1, tok2, tok3, tok4, tok5, tok6]    (length 6)
+
+Batch with padding (padded to max length 6):
+  Seq 1: [tok1, tok2, tok3, tok4, tok5, PAD]
+  Seq 2: [tok1, tok2, PAD,  PAD,  PAD,  PAD]
+  Seq 3: [tok1, tok2, tok3, tok4, tok5, tok6]
+```
+
+#### Where Exactly Padding Happens
+
+Padding occurs at **data collation time** — just before a batch is fed into the model, inside the `DataCollator`. The flow is:
+
+1. **Dataset**: Raw text examples of variable length
+2. **Tokenizer**: Converts text to token IDs (still variable length)
+3. **DataCollator** ← **padding happens here**: Pads all sequences in a batch to the same length
+4. **Attention mask**: A binary mask is created alongside the padded tokens (1 = real token, 0 = padding)
+5. **Model forward pass**: The attention mask ensures PAD tokens are ignored — they don't attend to other tokens and are excluded from loss computation
+
+In `lab_3/main.py`, `SFTTrainer` uses the default `DataCollatorForSeq2Seq` which pads each batch dynamically to the longest sequence in that batch (up to `max_seq_length=2048`).
+
+#### The Cost of Padding
+
+Padding wastes compute in two ways:
+
+1. **Wasted FLOPs**: Attention is computed over PAD tokens even though their outputs are masked
+2. **Wasted memory**: PAD tokens occupy GPU memory in activations and KV cache
+
+In datasets with highly variable sequence lengths, padding overhead can waste **30–50% of compute**.
+
+---
+
+### Padding-Free Training Methods
+
+#### 1. Sequence Packing (used in lab_1)
+
+Instead of padding short sequences, **pack multiple short sequences into one long sequence** up to `max_seq_length`:
+
+```
+Without packing (padded batches):
+  Slot 1 (len=2048): [Seq_A (500 tokens), PAD x1548]
+  Slot 2 (len=2048): [Seq_B (800 tokens), PAD x1248]
+
+With packing (no padding):
+  Slot 1 (len=2048): [Seq_A (500), Seq_B (800), Seq_C (748)]  ← 3 sequences packed!
+```
+
+**How cross-sequence contamination is prevented:** Flash Attention 2 uses a **block-diagonal attention mask** so each sequence only attends to its own tokens, not its neighbours in the same packed slot.
+
+**When to use:** Pre-training and continued pre-training on raw text, where sequence boundaries don't have special meaning. In `lab_1/main.py`, `packing=True` is set on the `SFTTrainer`.
+
+**When NOT to use:** SFT/instruction tuning — as noted in `lab_3/main.py` (line 173):
+> *"For SFT we do NOT use packing. Each example is a self-contained conversation and we want the model to learn the boundary between the user prompt and the assistant response independently."*
+
+Mixing partial conversations from different examples into a single slot could confuse the model about conversational context.
+
+#### 2. Dynamic Padding (vs. Static Padding)
+
+Instead of padding all sequences to the global `max_seq_length`, pad each batch only to the **longest sequence within that batch**:
+
+```
+Static padding (to max_seq_length=2048):
+  Batch: [Seq(50), Seq(60), Seq(45)] → all padded to 2048 ← huge waste
+
+Dynamic padding (to batch max):
+  Batch: [Seq(50), Seq(60), Seq(45)] → all padded to 60  ← minimal waste
+```
+
+`SFTTrainer` uses dynamic padding by default. This significantly reduces padding overhead for datasets where most sequences are much shorter than `max_seq_length`.
+
+#### 3. Unpadded / FlashAttention varlen (advanced)
+
+Some frameworks (including Unsloth, which `lab_3/main.py` uses) can pass sequences to Flash Attention in a **concatenated, unpadded format** using the `varlen` (variable-length) API. All sequences are concatenated into a single 1D tensor with a `cu_seqlens` (cumulative sequence lengths) array tracking boundaries. Flash Attention handles the masking internally with zero padding overhead.
+
+---
+
+### Summary
+
+| Method | Padding | VRAM Efficiency | Use Case |
+|---|---|---|---|
+| Static padding | To `max_seq_length` | Poor | Simple baseline |
+| Dynamic padding | To batch max | Good | SFT (lab_3 default) |
+| Sequence packing | None | Excellent | Pre-training (lab_1) |
+| FlashAttn varlen | None | Excellent | Advanced SFT with Unsloth |
+
+In `lab_3/main.py`, dynamic padding is used (via `SFTTrainer` defaults) since packing is disabled for SFT. The `max_seq_length=2048` acts as a hard truncation limit, not a padding target.
+
+</details>
+
+---
+
+## Chapter 4: QLoRA Fine-Tuning
+
+<details>
+<summary><b>Q1: In QLoRA, is training done in NF4 format? Are weights dequantized for eval? What format are the final adapter weights saved in?</b></summary>
+
+<br>
+
+### QLoRA Training Precision
+
+#### Training Computation
+
+In QLoRA, the base model weights are **stored** in NF4 (4-bit NormalFloat) format, but computation does **not** happen in NF4. During the forward and backward pass, weights are **dequantized on-the-fly to BF16** for the actual matrix multiplications. NF4 is a storage format only — there is no NF4 arithmetic.
+
+The flow at each layer:
+1. Base model weights stored in NF4 (frozen, ~4x memory reduction)
+2. Dequantize NF4 → BF16 on-the-fly for computation
+3. LoRA adapter weights (A and B matrices) live in BF16 throughout
+4. Gradients flow through the dequantized weights into the LoRA adapters
+5. Only the LoRA adapter weights are updated
+
+#### Eval vs Training
+
+The same dequantization happens during eval — there is no separate "dequantize for eval" step. The NF4 weights are always dequantized to BF16 at runtime for every forward pass, whether training or evaluating.
+
+#### Final Adapter Weights
+
+The saved LoRA adapter weights (the A and B matrices) are in **BF16** (or whichever floating point dtype was configured). They are never quantized — they remain in full precision throughout training.
+
+#### Summary Table
+
+| Component | Storage | Compute |
+|---|---|---|
+| Base model weights | NF4 | BF16 (dequantized on-the-fly) |
+| LoRA adapter weights | BF16 | BF16 |
+| Optimizer states | BF16/FP32 | BF16/FP32 |
+
+The key insight from the QLoRA paper is that you get the memory savings of 4-bit storage while maintaining BF16 compute fidelity, with negligible quality loss because NF4 is an information-theoretically optimal quantization for normally distributed weights.
+
+</details>
+
+---
+
 <!-- Add more chapters below as needed -->

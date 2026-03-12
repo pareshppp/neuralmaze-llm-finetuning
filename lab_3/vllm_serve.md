@@ -1,0 +1,1 @@
+vllm serve Qwen/Qwen3-0.6B     --enable-lora     --lora-modules transcript-extractor-lora=pareshppp/Qwen3-0.6B-LoRA-Finetuning-neuralmaze
