@@ -67,6 +67,7 @@ from unsloth import FastLanguageModel
 from datasets import load_dataset
 from trl import SFTTrainer
 from transformers import TrainingArguments
+from huggingface_hub import HfApi
 
 # --- LOGGING SETUP ---
 root = log.getLogger()
@@ -93,7 +94,7 @@ def main(
     eval_num_rows: int = None,
     # --- TRAINING PARAMETERS ---
     output_dir: str = "outputs",
-    hub_model_id: str = "Qwen3-0.6B-QLoRA-Finetuning-neuralmaze-thinking",
+    hub_model_id: str = "pareshppp/Qwen3-0.6B-QLoRA-Finetuning-neuralmaze-thinking",
     max_seq_length: int = 2048,
     batch_size: int = 4,
     gradient_accumulation_steps: int = 4,
@@ -237,12 +238,14 @@ def main(
     # --------------------------------------------------------------------------
     log.info(f"Merging and pushing FULL model to Hugging Face Hub: {hub_model_id}...")
 
-    # Save the merged model in 16-bit precision
-    model.push_to_hub_merged(
-        hub_model_id,
-        tokenizer,
-        save_method="merged_16bit",
-        # token = os.environ.get("HF_TOKEN"), # Unsloth picks this up automatically from env
+    # Save merged model locally first so a push failure doesn't require retraining
+    local_save_dir = os.path.join(output_dir, "merged_model")
+    log.info(f"Saving merged model locally to {local_save_dir}...")
+    model.save_pretrained_merged(local_save_dir, tokenizer, save_method="merged_16bit")
+
+    # Push from local save (no need to reload model into memory)
+    HfApi().upload_folder(
+        folder_path=local_save_dir, repo_id=hub_model_id, repo_type="model"
     )
 
     log.info("Push complete! The FULL merged model is now available on the Hub.")
