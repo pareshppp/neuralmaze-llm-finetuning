@@ -236,21 +236,34 @@ def main(
     # we can merge the adapters back into the base model weights.
     # We save as 'merged_16bit' to ensure compatibility with all HF tools.
     # --------------------------------------------------------------------------
-    log.info(f"Merging and pushing FULL model to Hugging Face Hub: {hub_model_id}...")
+    log.info(f"Saving and pushing adapter and merged model to Hugging Face Hub: {hub_model_id}...")
 
-    # Save merged model locally first so a push failure doesn't require retraining
-    local_save_dir = os.path.join(output_dir, "merged_model")
-    log.info(f"Saving merged model locally to {local_save_dir}...")
-    model.save_pretrained_merged(local_save_dir, tokenizer, save_method="merged_16bit")
+    api = HfApi()
 
-    # Push from local save (no need to reload model into memory)
-    HfApi().upload_folder(
-        folder_path=local_save_dir, repo_id=hub_model_id, repo_type="model"
+    # Save + push adapter
+    adapter_save_dir = os.path.join(output_dir, "adapter_model")
+    log.info(f"Saving adapter locally to {adapter_save_dir}...")
+    model.save_pretrained(adapter_save_dir)
+    tokenizer.save_pretrained(adapter_save_dir)
+    api.create_repo(repo_id=hub_model_id + "-adapter", repo_type="model", exist_ok=True)
+    api.upload_folder(
+        folder_path=adapter_save_dir, repo_id=hub_model_id + "-adapter", repo_type="model"
     )
+    log.info(f"Adapter pushed to: {hub_model_id}-adapter")
 
-    log.info("Push complete! The FULL merged model is now available on the Hub.")
+    # Save + push merged model
+    merged_save_dir = os.path.join(output_dir, "merged_model")
+    log.info(f"Saving merged model locally to {merged_save_dir}...")
+    model.save_pretrained_merged(merged_save_dir, tokenizer, save_method="merged_16bit")
+    api.create_repo(repo_id=hub_model_id, repo_type="model", exist_ok=True)
+    api.upload_folder(
+        folder_path=merged_save_dir, repo_id=hub_model_id, repo_type="model"
+    )
+    log.info(f"Merged model pushed to: {hub_model_id}")
+
+    log.info("Push complete! Both adapter and merged model are available on the Hub.")
     log.info(
-        f"You can load it normally with: AutoModelForCausalLM.from_pretrained('{hub_model_id}')"
+        f"Load merged model with: AutoModelForCausalLM.from_pretrained('{hub_model_id}')"
     )
 
 
